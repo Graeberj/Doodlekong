@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import com.jigcoding.doodlekong.R
 import com.jigcoding.doodlekong.adapters.ChatMessageAdapter
+import com.jigcoding.doodlekong.data.remote.ws.Room
 import com.jigcoding.doodlekong.data.remote.ws.models.*
 import com.jigcoding.doodlekong.databinding.ActivityDrawingBinding
 import com.jigcoding.doodlekong.util.Constants.DEFAULT_PAINT_THICKNESS
@@ -71,12 +72,12 @@ class DrawingActivity : AppCompatActivity() {
         rvPlayers = header.findViewById(R.id.rvPlayers)
         binding.root.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
 
-        binding.ibPlayers.setOnClickListener{
+        binding.ibPlayers.setOnClickListener {
             binding.root.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
             binding.root.openDrawer(GravityCompat.START)
         }
 
-        binding.root.addDrawerListener(object: DrawerLayout.DrawerListener{
+        binding.root.addDrawerListener(object : DrawerLayout.DrawerListener {
             override fun onDrawerSlide(drawerView: View, slideOffset: Float) = Unit
 
             override fun onDrawerOpened(drawerView: View) = Unit
@@ -106,7 +107,7 @@ class DrawingActivity : AppCompatActivity() {
         }
 
         binding.ibUndo.setOnClickListener {
-            if (binding.drawingView.isUserDrawing){
+            if (binding.drawingView.isUserDrawing) {
                 binding.drawingView.undo()
                 viewModel.sendBaseModel(DrawAction(DrawAction.ACTION_UNDO))
             }
@@ -117,7 +118,7 @@ class DrawingActivity : AppCompatActivity() {
         }
 
         binding.drawingView.setOnDrawListener {
-            if(binding.drawingView.isUserDrawing){
+            if (binding.drawingView.isUserDrawing) {
                 viewModel.sendBaseModel(it)
             }
         }
@@ -131,7 +132,7 @@ class DrawingActivity : AppCompatActivity() {
     private fun subscribeToUiStateUpdates() {
         lifecycleScope.launchWhenStarted {
             viewModel.chat.collect { chat ->
-                if(chatMessageAdapter.chatObjects.isEmpty()){
+                if (chatMessageAdapter.chatObjects.isEmpty()) {
                     updateChatMessageList(chat)
                 }
             }
@@ -139,7 +140,7 @@ class DrawingActivity : AppCompatActivity() {
         lifecycleScope.launchWhenStarted {
             viewModel.newWords.collect {
                 val newWords = it.newWords
-                if(newWords.isEmpty()){
+                if (newWords.isEmpty()) {
                     return@collect
                 }
                 binding.apply {
@@ -191,6 +192,57 @@ class DrawingActivity : AppCompatActivity() {
             }
         }
         lifecycleScope.launchWhenStarted {
+            viewModel.phaseTime.collect { time ->
+                binding.roundTimerProgressBar.progress = time.toInt()
+                binding.tvRemainingTimeChooseWord.text = (time / 1000L).toString()
+            }
+        }
+        lifecycleScope.launchWhenStarted {
+            viewModel.phase.collect { phase ->
+                when (phase.phase) {
+                    Room.Phase.WAITING_FOR_PLAYERS -> {
+                        binding.tvCurWord.text = getText(R.string.waiting_for_players)
+                        viewModel.cancelTimer()
+                        viewModel.setConnectionProgressBarVisibility(false)
+                        binding.roundTimerProgressBar.progress = binding.roundTimerProgressBar.max
+                    }
+                    Room.Phase.WAITING_FOR_START -> {
+                        binding.roundTimerProgressBar.max = phase.time.toInt()
+                        binding.tvCurWord.text = getString(R.string.waiting_for_start)
+                    }
+                    Room.Phase.NEW_ROUND -> {
+                        phase.drawingPlayer?.let { player ->
+                            binding.tvCurWord.text = getString(R.string.player_is_drawing, player)
+                        }
+                        binding.apply {
+                            drawingView.isEnabled = false
+                            drawingView.setColor(Color.BLACK)
+                            drawingView.setThickness(DEFAULT_PAINT_THICKNESS)
+                            roundTimerProgressBar.max = phase.time.toInt()
+                            val isUserDrawingPlayer = phase.drawingPlayer == args.username
+                            chooseWordOverlay.isVisible = isUserDrawingPlayer
+                        }
+                    }
+                    Room.Phase.GAME_RUNNING -> {
+                        binding.chooseWordOverlay.isVisible = false
+                        binding.roundTimerProgressBar.max = phase.time.toInt()
+                    }
+                    Room.Phase.SHOW_WORD -> {
+                        binding.apply {
+                            if(drawingView.isDrawing){
+                                drawingView.finishOffDrawing()
+                            }
+                            drawingView.isEnabled = false
+                            drawingView.setColor(Color.BLACK)
+                            drawingView.setThickness(DEFAULT_PAINT_THICKNESS)
+                            roundTimerProgressBar.max = phase.time.toInt()
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+        lifecycleScope.launchWhenStarted {
             viewModel.connectionProgressBarVisible.collect { isVisible ->
                 binding.connectionProgressBar.isVisible = isVisible
             }
@@ -199,11 +251,11 @@ class DrawingActivity : AppCompatActivity() {
 
     private fun listenToSocketEvents() = lifecycleScope.launchWhenStarted {
         viewModel.socketEvent.collect { event ->
-            when(event) {
+            when (event) {
                 is DrawingViewModel.SocketEvent.DrawDataEvent -> {
                     val drawData = event.data
-                    if(!binding.drawingView.isUserDrawing){
-                        when(drawData.motionEvent) {
+                    if (!binding.drawingView.isUserDrawing) {
+                        when (drawData.motionEvent) {
                             MotionEvent.ACTION_DOWN -> binding.drawingView.startedTouchExternally(
                                 drawData
                             )
@@ -230,7 +282,7 @@ class DrawingActivity : AppCompatActivity() {
                     binding.drawingView.undo()
                 }
                 is DrawingViewModel.SocketEvent.GameErrorEvent -> {
-                    when(event.data.errorType) {
+                    when (event.data.errorType) {
                         GameError.ERROR_ROOM_NOT_FOUND -> finish()
                     }
 
@@ -242,7 +294,7 @@ class DrawingActivity : AppCompatActivity() {
 
     private fun listenToConnectionEvents() = lifecycleScope.launchWhenStarted {
         viewModel.connectionEvent.collect { event ->
-            when(event) {
+            when (event) {
                 is WebSocket.Event.OnConnectionOpened<*> -> {
                     viewModel.sendBaseModel(
                         JoinRoomHandshake(
@@ -276,19 +328,19 @@ class DrawingActivity : AppCompatActivity() {
         binding.rvChat.layoutManager?.onSaveInstanceState()
     }
 
-    private fun updateChatMessageList(chat: List<BaseModel>){
+    private fun updateChatMessageList(chat: List<BaseModel>) {
         updateChatJob?.cancel()
         updateChatJob = lifecycleScope.launch {
             chatMessageAdapter.updateDataset(chat)
         }
     }
 
-    private suspend fun addChatObjectToRecyclerview(chatObject: BaseModel){
+    private suspend fun addChatObjectToRecyclerview(chatObject: BaseModel) {
         val canScrollDown = binding.rvChat.canScrollVertically(1)
         updateChatMessageList(chatMessageAdapter.chatObjects + chatObject)
         updateChatJob?.join()
-        if(!canScrollDown) {
-            binding.rvChat.scrollToPosition(chatMessageAdapter.chatObjects.size -1)
+        if (!canScrollDown) {
+            binding.rvChat.scrollToPosition(chatMessageAdapter.chatObjects.size - 1)
         }
     }
 
@@ -299,7 +351,7 @@ class DrawingActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if(toggle.onOptionsItemSelected(item)){
+        if (toggle.onOptionsItemSelected(item)) {
             return true
         }
         return super.onOptionsItemSelected(item)

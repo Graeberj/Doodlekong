@@ -1,5 +1,6 @@
 package com.jigcoding.doodlekong.ui.views
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
@@ -50,7 +51,7 @@ class DrawingView @JvmOverloads constructor(
 
     private var onDrawListener: ((DrawData) -> Unit)? = null
 
-    fun setOnDrawListener(listener:(DrawData) -> Unit){
+    fun setOnDrawListener(listener: (DrawData) -> Unit) {
         onDrawListener = listener
     }
 
@@ -95,11 +96,11 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    fun moveTouchExternally(drawData: DrawData){
+    fun moveTouchExternally(drawData: DrawData) {
         parseDrawData(drawData).apply {
             val dx = abs(toX - fromX)
             val dy = abs(toY - fromY)
-            if(!startedTouch){
+            if (!startedTouch) {
                 startedTouchExternally(drawData)
             }
             if (dx >= smoothness || dy >= smoothness) {
@@ -109,7 +110,7 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    fun releasedTouchExternally(drawData: DrawData){
+    fun releasedTouchExternally(drawData: DrawData) {
         parseDrawData(drawData).apply {
             path.lineTo(fromX, fromY)
             canvas?.drawPath(path, paint)
@@ -129,8 +130,8 @@ class DrawingView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun undo(){
-        if(paths.isNotEmpty()){
+    fun undo() {
+        if (paths.isNotEmpty()) {
             paths.pop()
             pathDataChangedListener?.let { change ->
                 change(paths)
@@ -182,6 +183,7 @@ class DrawingView @JvmOverloads constructor(
         invalidate()
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         if (!isEnabled) {
             return false
@@ -196,7 +198,7 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun parseDrawData(drawData: DrawData): DrawData{
+    private fun parseDrawData(drawData: DrawData): DrawData {
         return drawData.copy(
             fromX = drawData.fromX * viewWidth!!,
             fromY = drawData.fromY * viewHeight!!,
@@ -211,7 +213,7 @@ class DrawingView @JvmOverloads constructor(
         toX: Float,
         toY: Float,
         motionEvent: Int
-    ) : DrawData{
+    ): DrawData {
         return DrawData(
             roomName ?: throw IllegalStateException("Must set the roomName in drawing view"),
             paint.color,
@@ -222,6 +224,18 @@ class DrawingView @JvmOverloads constructor(
             toY / viewHeight!!,
             motionEvent
         )
+    }
+
+    fun finishOffDrawing() {
+        isDrawing = false
+        path.lineTo(curX ?: return, curY ?: return)
+        canvas?.drawPath(path, paint)
+        paths.push(PathData(path, paint.color, paint.strokeWidth))
+        pathDataChangedListener?.let { change ->
+            change(paths)
+        }
+        path = Path()
+        invalidate()
     }
 
     fun setThickness(thickness: Float) {
