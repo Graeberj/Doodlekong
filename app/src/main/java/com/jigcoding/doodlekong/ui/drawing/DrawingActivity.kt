@@ -23,6 +23,7 @@ import com.jigcoding.doodlekong.adapters.ChatMessageAdapter
 import com.jigcoding.doodlekong.data.remote.ws.models.*
 import com.jigcoding.doodlekong.databinding.ActivityDrawingBinding
 import com.jigcoding.doodlekong.util.Constants.DEFAULT_PAINT_THICKNESS
+import com.jigcoding.doodlekong.util.hideKeyboard
 import com.tinder.scarlet.WebSocket
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -101,6 +102,7 @@ class DrawingActivity : AppCompatActivity() {
                 )
             )
             binding.etMessage.text?.clear()
+            hideKeyboard(binding.root)
         }
 
         binding.ibUndo.setOnClickListener {
@@ -134,6 +136,32 @@ class DrawingActivity : AppCompatActivity() {
                 }
             }
         }
+        lifecycleScope.launchWhenStarted {
+            viewModel.newWords.collect {
+                val newWords = it.newWords
+                if(newWords.isEmpty()){
+                    return@collect
+                }
+                binding.apply {
+                    btnFirstWord.text = newWords[0]
+                    btnSecondWord.text = newWords[1]
+                    btnThirdWord.text = newWords[2]
+                    btnFirstWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[0], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                    btnSecondWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[1], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                    btnThirdWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[2], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                }
+            }
+        }
+
         lifecycleScope.launchWhenStarted {
             viewModel.selectedColorButtonId.collect { id ->
                 binding.colorGroup.check(id)
@@ -187,6 +215,10 @@ class DrawingActivity : AppCompatActivity() {
                             )
                         }
                     }
+                }
+                is DrawingViewModel.SocketEvent.ChosenWordEvent -> {
+                    binding.tvCurWord.text = event.data.chosenWord
+                    binding.ibUndo.isEnabled = false
                 }
                 is DrawingViewModel.SocketEvent.ChatMessageEvent -> {
                     addChatObjectToRecyclerview(event.data)
